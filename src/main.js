@@ -453,6 +453,15 @@ class Game {
       document.body.classList.add('touch');
       document.querySelector('.row-label').textContent = '点按选择你的角色 · 长按选择对手 · 拖动画面旋转查看';
       $('pauseBtn').addEventListener('click', () => { if (this.inMatch) this.setPaused(true); });
+      // the start button joins the fullscreen button in the top-right corner
+      document.querySelector('.menu-actions').appendChild($('start'));
+      for (const id of ['fsMenu', 'fsGame']) $(id).addEventListener('click', () => this.toggleFullscreen());
+      const sync = () => {
+        const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        for (const id of ['fsMenu', 'fsGame']) { $(id).querySelector('span').textContent = on ? '退出全屏' : '全屏'; $(id).setAttribute('aria-label', on ? '退出全屏' : '全屏'); }
+      };
+      document.addEventListener('fullscreenchange', sync);
+      document.addEventListener('webkitfullscreenchange', sync);
     }
     $('resume').addEventListener('click', () => this.setPaused(false));
     $('restart').addEventListener('click', () => { this.setPaused(false); this.startMatch(); });
@@ -1174,11 +1183,42 @@ class Game {
   // Phones: play fullscreen and sideways where the browser allows it (Android
   // Chrome; iOS Safari has neither and keeps the "turn your phone" prompt)
   goFullscreen() {
-    if (!isTouchDevice() || document.fullscreenElement) return;
+    if (!isTouchDevice() || document.fullscreenElement || document.webkitFullscreenElement) return;
+    this.enterFullscreen(false);
+  }
+
+  // The fullscreen buttons. iPhone Safari has no fullscreen for web pages:
+  // the way there is adding the game to the home screen, so say how.
+  toggleFullscreen() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+      return;
+    }
+    this.enterFullscreen(true);
+  }
+
+  enterFullscreen(explain) {
     const el = document.documentElement;
-    el.requestFullscreen?.({ navigationUI: 'hide' })
-      .then(() => screen.orientation?.lock?.('landscape').catch(() => {}))
-      .catch(() => {});
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    const fail = () => {
+      if (!explain) return;
+      // its own notice: the HUD toast is hidden while the menu is up
+      let n = $('fsNote');
+      if (!n) { n = document.createElement('div'); n.id = 'fsNote'; document.body.appendChild(n); }
+      n.textContent = '这个浏览器没有进入全屏。iPhone：点 Safari 的「分享」→「添加到主屏幕」，从主屏幕图标打开就是全屏；其他手机可以换用 Chrome 打开。';
+      n.classList.add('show');
+      clearTimeout(this._fsNoteT);
+      this._fsNoteT = setTimeout(() => n.classList.remove('show'), 5000);
+    };
+    if (!req) return fail();
+    // a browser that silently ignores the request gets the instructions too
+    if (explain) setTimeout(() => { if (!document.fullscreenElement && !document.webkitFullscreenElement) fail(); }, 1500);
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      Promise.resolve(p)
+        .then(() => screen.orientation?.lock?.('landscape').catch(() => {}))
+        .catch(fail);
+    } catch { fail(); }
   }
 
   // The fighter's moves and every combo string, read from its starter and

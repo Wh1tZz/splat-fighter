@@ -15,13 +15,13 @@
   "spz-js": "./vendor/spz-js/package/dist/index.js",
   "zstddec": "./vendor/zstddec/package/dist/zstddec.mjs",
   "@viggle/splat-engine": "./vendor/splat-engine/package/dist/index.js",
-  "./src/config.js": "./src/config.js?v=2",
-  "./src/fighter.js": "./src/fighter.js?v=2",
-  "./src/ai.js": "./src/ai.js?v=2",
-  "./src/camera.js": "./src/camera.js?v=2",
-  "./src/fx.js": "./src/fx.js?v=2",
-  "./src/input.js": "./src/input.js?v=2",
-  "./src/touch.js": "./src/touch.js?v=2"
+  "./src/config.js": "./src/config.js?v=3",
+  "./src/fighter.js": "./src/fighter.js?v=3",
+  "./src/ai.js": "./src/ai.js?v=3",
+  "./src/camera.js": "./src/camera.js?v=3",
+  "./src/fx.js": "./src/fx.js?v=3",
+  "./src/input.js": "./src/input.js?v=3",
+  "./src/touch.js": "./src/touch.js?v=3"
 } }
 </script>
 <!-- ?v= : the game's own scripts are versioned so a browser never mixes a
@@ -199,6 +199,19 @@
   body.meter-full .tb[data-act="special"] { background: rgba(255, 211, 77, 0.35); animation: pulse 0.4s infinite alternate; }
   #pauseBtn { position: absolute; top: calc(env(safe-area-inset-top) + 8px); right: calc(env(safe-area-inset-right) + 8px); width: 40px; height: 40px; border-radius: 50%; pointer-events: auto; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.35); color: #fff; font: bold 16px var(--font-ui); display: none; }
   body.touch #pauseBtn { display: block; }
+  /* Phones: the start button sits on its own in the top-right corner (moved
+     out of the options row by main.js - a fixed button inside a scrolling row
+     is clipped away by iPhone Safari), with the fullscreen button beside it */
+  .menu-actions { display: none; }
+  body.touch .menu-actions { display: flex; position: fixed; z-index: 12; top: calc(env(safe-area-inset-top) + 12px); right: calc(env(safe-area-inset-right) + 12px); gap: 10px; align-items: center; pointer-events: auto; }
+  body.touch .menu-actions .go { font-size: 18px; padding: 9px 24px; }
+  .fsbtn { display: none; pointer-events: auto; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 12px; border-radius: 20px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.4); color: #fff; font: bold 13px var(--font-ui); }
+  .fsbtn svg { width: 18px; height: 18px; }
+  body.touch .fsbtn { display: inline-flex; }
+  #fsGame { position: absolute; top: calc(env(safe-area-inset-top) + 8px); left: calc(env(safe-area-inset-left) + 8px); width: 40px; padding: 0; }
+  #fsGame span { display: none; }
+  #fsNote { position: fixed; z-index: 50; left: 50%; top: 64px; transform: translateX(-50%); max-width: min(560px, 88vw); padding: 10px 14px; border-radius: 10px; background: rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.3); font-size: 13px; line-height: 1.6; color: #fff; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  #fsNote.show { opacity: 1; }
   body.touch .bars { width: calc(100% - 120px); }
   /* the game is played sideways: ask to turn a phone held upright */
   #rotate { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #07070a; text-align: center; padding: 24px; }
@@ -219,8 +232,7 @@
     .controls-row { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; max-width: 100%; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
     .seg { flex: none; }
     .seg button, .seg .lbl { padding: 6px 9px; font-size: 11px; white-space: nowrap; }
-    /* the start button can't hide at the end of the scrolling options row */
-    .go { position: fixed; top: calc(env(safe-area-inset-top) + 14px); right: calc(env(safe-area-inset-right) + 14px); font-size: 18px; padding: 9px 22px; }
+    .go { font-size: 16px; padding: 7px 18px; flex: none; }
     .hint { display: none; }
     .bars { top: calc(env(safe-area-inset-top) + 6px); }
     .nameplate { font-size: 14px; }
@@ -304,6 +316,7 @@
       <div class="tb sm" data-act="skill2">技二</div>
     </div>
     <button id="pauseBtn" aria-label="暂停">II</button>
+    <button id="fsGame" class="fsbtn" aria-label="全屏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>全屏</span></button>
   </div>
 </div>
 <div id="rotate">
@@ -335,6 +348,9 @@
     <div class="stat">速度<div><i id="stSpd"></i></div></div>
     <div class="stat">体力<div><i id="stHp"></i></div></div>
     <div class="badge" id="infoBadge"></div>
+  </div>
+  <div class="menu-actions">
+    <button id="fsMenu" class="fsbtn" aria-label="全屏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>全屏</span></button>
   </div>
   <div class="roster-wrap">
     <div class="row-label">点击选择你的角色 · 右键选择对手 · 拖动画面旋转查看</div>
@@ -369,6 +385,6 @@
   <div class="btns"><button class="btn" id="again">再来一局</button><button class="btn" id="resultMenu">返回选人</button></div>
 </div>
 
-<script type="module" src="./src/main.js?v=2"></script>
+<script type="module" src="./src/main.js?v=3"></script>
 </body>
 </html>
