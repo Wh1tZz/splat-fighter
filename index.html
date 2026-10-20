@@ -14,14 +14,14 @@
   "playcanvas": "./vendor/playcanvas/package/build/playcanvas.min.mjs",
   "spz-js": "./vendor/spz-js/package/dist/index.js",
   "zstddec": "./vendor/zstddec/package/dist/zstddec.mjs",
-  "@viggle/splat-engine": "./vendor/splat-engine/package/dist/index.js?v=8",
-  "./src/config.js": "./src/config.js?v=8",
-  "./src/fighter.js": "./src/fighter.js?v=8",
-  "./src/ai.js": "./src/ai.js?v=8",
-  "./src/camera.js": "./src/camera.js?v=8",
-  "./src/fx.js": "./src/fx.js?v=8",
-  "./src/input.js": "./src/input.js?v=8",
-  "./src/touch.js": "./src/touch.js?v=8"
+  "@viggle/splat-engine": "./vendor/splat-engine/package/dist/index.js?v=9",
+  "./src/config.js": "./src/config.js?v=9",
+  "./src/fighter.js": "./src/fighter.js?v=9",
+  "./src/ai.js": "./src/ai.js?v=9",
+  "./src/camera.js": "./src/camera.js?v=9",
+  "./src/fx.js": "./src/fx.js?v=9",
+  "./src/input.js": "./src/input.js?v=9",
+  "./src/touch.js": "./src/touch.js?v=9"
 } }
 </script>
 <!-- ?v= : the game's own scripts are versioned so a browser never mixes a
@@ -337,7 +337,6 @@
   <div class="tag">PINOC 高斯泼溅格斗</div>
   <div class="loadbar"><div id="loadFill"></div></div>
   <div id="loadText" role="status" aria-live="polite">正在启动引擎…</div>
-  <button class="btn" data-renderer="compat" style="margin-top:14px">画面异常？切换兼容模式</button>
   <div class="warn">光敏性提示：本游戏包含闪光与快速画面变化。若你或家人有光敏性癫痫病史，请在选人界面把「特效」设为「柔和」，并在游玩时如有不适立即停止。</div>
 </div>
 
@@ -366,7 +365,6 @@
       <div class="seg" id="stage"><span class="lbl">地图</span></div>
       <div class="seg" id="diff"><span class="lbl">难度</span><button data-v="easy">入门</button><button data-v="normal" class="on">普通</button><button data-v="hard">高手</button></div>
       <div class="seg" id="qual"><span class="lbl">画质</span><button data-v="high" class="on">高（48K）</button><button data-v="perf">标准（16K）</button><button data-v="low">流畅（老机型）</button></div>
-      <div class="seg"><span class="lbl">画面异常</span><button data-renderer="compat">兼容模式</button><button data-renderer="auto">恢复自动</button></div>
       <div class="seg" id="fxmode"><span class="lbl">特效</span><button data-v="full" class="on">标准</button><button data-v="soft">柔和（减弱闪光与震屏）</button></div>
       <button class="go" id="start">开始战斗</button>
     </div>
@@ -393,6 +391,6 @@
   <div class="btns"><button class="btn" id="again">再来一局</button><button class="btn" id="resultMenu">返回选人</button></div>
 </div>
 
-<script src="./src/compat.js?v=8"></script>
+<script src="./src/compat.js?v=9"></script>
 </body>
 </html>

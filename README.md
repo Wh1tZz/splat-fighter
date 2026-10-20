@@ -10,16 +10,15 @@
 - 不需要安装 Node 或 Python，服务器是 `serve.ps1`（Windows 自带 PowerShell）。
 - 关掉服务器窗口即停止。
 
-## 浏览器兼容与黑屏恢复
+## 浏览器自动适配
 
-支持目标为具备 WebGPU 或 WebGL2、模块映射的现代 Chrome、Edge、Firefox 和 Safari；请通过 HTTP/HTTPS 网址访问，不能直接打开本地 HTML 文件。
+直接打开正常游戏网址即可，无需选择兼容模式。首次优先使用已经修复着色器的 GPU 光栅渲染；不支持 WebGPU 的浏览器由引擎自动使用 WebGL2。GPU 错误、设备丢失或启动后连续没有实际画面时，会自动重试 WebGL2，并记住可用后端。画质选择保持原样，实际帧率取决于设备与后端。
 
-- 默认自动选择图形后端；GPU 错误或设备丢失时，依次尝试 GPU 光栅渲染和 WebGL2。恢复过程保留画质选择，实际帧率取决于后端与硬件。
-- 加载页和选人页有「兼容模式」入口；再点一次可继续切换。选「恢复自动」可重新尝试默认渲染。
-- 可直接使用 `?renderer=raster` 或 `?renderer=webgl` 指定兼容路径，原来的 `?webgl` 参数仍有效。
-- 无可用图形设备、模块加载失败或浏览器版本过旧时显示错误及重试按钮；图形加速被系统禁用时仍需在浏览器设置中启用。
-- 引擎中的 WGSL 近裁剪表达式已添加括号，避免 GPU 光栅路径把比较运算误读为模板参数；画布尺寸同时兼容 ResizeObserver 的数组、对象和 contentRect 格式。
-- 回归测试：`node tests/browser-compat.test.cjs`，覆盖恢复顺序、禁止存储、资源失败、设备错误及尺寸格式。Edge、Firefox、Safari 仍应在各自实际设备上验收，不能以 Chrome 测试替代。
+启动画面检测只进行少量 24×24 像素采样；检测成功后立即停止，不增加对战逐帧开销。隐藏标签页和浏览器不允许的画布读取不计为黑屏。无可用图形设备时显示明确原因；网页无法代替用户启用系统图形加速。
+
+支持目标为具备模块映射、WebGPU 或 WebGL2 的现代 Chrome、Edge、Firefox、Safari。Edge、Firefox 和 Safari 仍需在各自设备实测验收。开发调试参数 `?renderer=webgl`、`?renderer=raster`、`?renderer=auto` 保留，正常玩家无需使用。
+
+回归测试：`node tests/browser-compat.test.cjs`。
 
 ## 手机 / 平板
 
