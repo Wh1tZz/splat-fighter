@@ -140,5 +140,5 @@
     return;
   }
   // Dynamic import makes module HTTP errors and syntax failures catchable.
-  import('./main.js?v=9').catch(fatal);
+  import('./main.js?v=12').catch(fatal);
 })();

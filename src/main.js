@@ -9,6 +9,7 @@ import { FightCamera } from './camera.js';
 import { FX } from './fx.js';
 import { Input } from './input.js';
 import { isTouchDevice } from './touch.js';
+import { loadMotions } from './motion-pack.js';
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -155,12 +156,14 @@ class Game {
     // ?v= busts the browser cache whenever motion files are swapped
     const urls = CLIPS.map((c) => [c, `./assets/motions/${c}.glb?v=${MOTION_VERSION}`]).concat([...own].map((c) => [c, `./assets/motions/chars/${c}.glb?v=${MOTION_VERSION}`]));
     this.progress(0.45, `正在载入 PINOC 动作（${urls.length} 段）…`);
-    let done = 0;
-    await Promise.all(urls.map(async ([name, url]) => {
-      await Animation.loadGlb(this.scene, url, name);
-      done++;
-      this.progress(0.45 + 0.3 * (done / urls.length));
-    }));
+    const motions = await loadMotions({
+      entries: urls, version: MOTION_VERSION, fetcher: fetchGameAsset,
+      register: (name, bytes) => Animation.fromGlb(bytes).register(this.scene, name),
+      loadFile: (name, url) => Animation.loadGlb(this.scene, url, name),
+      progress: ({ phase, fraction }) => this.progress(phase === 'download' ? 0.45 + 0.1 * fraction : 0.55 + 0.18 * fraction),
+      onFallback: (error) => console.warn('Motion pack unavailable; using original clips', error.message),
+    });
+    document.documentElement.dataset.motionSource = motions.source;
 
     await stageReady;
     this.progress(0.74, '正在校准动作朝向…');
@@ -172,7 +175,7 @@ class Game {
     this.trimClipMemory();
 
     this.progress(0.76, '正在载入 4 名高斯格斗家…');
-    done = 0;
+    let done = 0;
     // (phones show the menu fighters at 16K splats: a third of the memory and download)
     const mobile = isTouchDevice();
     this.previews = await Promise.all(ROSTER.map(async (def) => {
@@ -1477,7 +1480,7 @@ let lastFailedUrl = '';
 // ?flaky=0.25 drops that share of downloads on purpose, to test the retries
 const FLAKY = Number(new URLSearchParams(location.search).get('flaky')) || 0;
 let dropped = 0;
-setAssetFetch(async (url, init) => {
+const fetchGameAsset = async (url, init) => {
   await slot();
   try {
     for (let attempt = 0; ; attempt++) {
@@ -1493,7 +1496,8 @@ setAssetFetch(async (url, init) => {
       }
     }
   } finally { release(); }
-});
+};
+setAssetFetch(fetchGameAsset);
 
 const game = new Game();
 window.__game = game;

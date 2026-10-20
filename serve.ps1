@@ -52,7 +52,7 @@ try {
       } else {
         $ext = [System.IO.Path]::GetExtension($path).ToLower()
         $res.ContentType = if ($mime.ContainsKey($ext)) { $mime[$ext] } else { 'application/octet-stream' }
-        $versionedAsset = $ctx.Request.QueryString['v'] -and $ext -in @('.glb', '.spz', '.vsplat')
+        $versionedAsset = $ctx.Request.QueryString['v'] -and $ext -in @('.glb', '.spz', '.vsplat', '.gz')
         if ($versionedAsset) {
           $res.Headers.Add('Cache-Control', 'public, max-age=31536000, immutable')
         } else {
