@@ -5,7 +5,9 @@
 
 // (the primary pointer is a finger: phones and tablets, not a laptop that
 // merely has a touch screen)
-export const isTouchDevice = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+// (?touch=1 forces it, to try the phone layout on a computer)
+export const isTouchDevice = () => /[?&]touch=1/.test(location.search)
+  || (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
 
 // joystick travel (px) for full deflection, and the dead zone per axis
 const RADIUS = 46;
