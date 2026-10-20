@@ -1,0 +1,60 @@
+{
+  "name": "@viggle/splat-engine",
+  "version": "0.2.0",
+  "description": "Gaussian-splat character engine for PlayCanvas: load .vsplat character bundles, skin them to a rig, play skeletal animation, and render them alongside .ply/.spz environment splats.",
+  "keywords": [
+    "gaussian-splatting",
+    "splat",
+    "playcanvas",
+    "character",
+    "animation",
+    "skinning"
+  ],
+  "license": "MIT",
+  "homepage": "https://viggle.ai",
+  "author": {
+    "name": "Viggle / WarpEngine"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": [
+    "./dist/binary-gsplat-worker.js"
+  ],
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node build.mjs",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "prepare": "npm run build"
+  },
+  "peerDependencies": {
+    "playcanvas": "2.18.0"
+  },
+  "dependencies": {
+    "spz-js": "^1.2.5",
+    "zstddec": "^0.3.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "playcanvas": "2.18.0",
+    "rollup": "^4.62.4",
+    "rollup-plugin-dts": "^6.5.1",
+    "typescript": "^6.0.2"
+  }
+}

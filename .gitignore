@@ -1,0 +1,17 @@
+# local test captures and tool config
+.debug/
+.claude/
+.mcp.json
+
+# alternate PINOC samples that were not picked (the game never loads them)
+assets/motions/candidates/
+
+# PlayCanvas: only the single bundled build is loaded (see the import map)
+vendor/playcanvas/package/*
+!vendor/playcanvas/package/build/
+vendor/playcanvas/package/build/*
+!vendor/playcanvas/package/build/playcanvas.min.mjs
+
+# source maps and type declarations are not needed to run
+vendor/**/*.map
+vendor/**/*.d.ts

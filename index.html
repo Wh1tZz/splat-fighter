@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splat Fighter</title>
+<link rel="icon" href="data:,">
+<script type="importmap">
+{ "imports": {
+  "playcanvas": "./vendor/playcanvas/package/build/playcanvas.min.mjs",
+  "spz-js": "./vendor/spz-js/package/dist/index.js",
+  "zstddec": "./vendor/zstddec/package/dist/zstddec.mjs",
+  "@viggle/splat-engine": "./vendor/splat-engine/package/dist/index.js"
+} }
+</script>
+<style>
+  :root {
+    --p1: #ff3b3b; --p2: #2ee6ff; --gold: #ffd34d; --ink: #f4f1ea; --dim: #a9a49a; --panel: rgba(10, 10, 14, 0.72);
+    --font-display: "Arial Black", "Impact", "Microsoft YaHei", sans-serif;
+    --font-ui: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07070a; color: var(--ink); font-family: var(--font-ui); user-select: none; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #view:active { cursor: grabbing; }
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; }
+  @keyframes flashFade { from { opacity: var(--flash-peak, 1); } to { opacity: 0; } }
+  #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%); }
+  .hidden { display: none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  .bars { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); width: min(1180px, calc(100% - 32px)); display: grid; grid-template-columns: 1fr 96px 1fr; gap: 10px; align-items: start; }
+  .side { display: flex; gap: 10px; align-items: flex-start; }
+  .side.right { flex-direction: row-reverse; }
+  .portrait { width: 64px; height: 64px; border-radius: 6px; overflow: hidden; border: 2px solid rgba(255,255,255,0.7); background: #222; flex: none; }
+  .portrait img { width: 100%; height: 220%; object-fit: cover; object-position: 50% 0; transform: translateY(-2%); }
+  .meta { flex: 1; min-width: 0; }
+  .nameplate { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--font-display); font-style: italic; letter-spacing: 1px; font-size: 20px; text-shadow: 0 2px 0 #000; }
+  .side.right .nameplate { flex-direction: row-reverse; }
+  .wins { display: flex; gap: 5px; }
+  .wins i { width: 13px; height: 13px; transform: skewX(-18deg); border: 2px solid rgba(255,255,255,0.7); display: inline-block; background: rgba(0,0,0,0.4); }
+  .wins i.on { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 10px var(--gold); }
+  .hp { position: relative; height: 22px; margin-top: 4px; transform: skewX(-18deg); background: rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.85); overflow: hidden; }
+  .hp .lag, .hp .fill { position: absolute; top: 0; bottom: 0; right: 0; width: 100%; }
+  .side.left .hp .lag, .side.left .hp .fill { left: auto; right: 0; }
+  .side.right .hp .lag, .side.right .hp .fill { left: 0; right: auto; }
+  .hp .lag { background: #fff; opacity: 0.85; transition: width 0.6s ease-out 0.25s; }
+  .hp .fill { background: linear-gradient(180deg, #ffe46b, #f7a51c 60%, #d9761a); }
+  .hp.low .fill { background: linear-gradient(180deg, #ff6b6b, #e02020); animation: pulse 0.5s infinite alternate; }
+  @keyframes pulse { to { filter: brightness(1.4); } }
+  .meter { margin-top: 6px; height: 9px; transform: skewX(-18deg); background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.5); overflow: hidden; position: relative; }
+  .meter .m { position: absolute; top: 0; bottom: 0; width: 0%; background: linear-gradient(90deg, #4cc9ff, #b45cff); }
+  .side.left .meter .m { left: 0; }
+  .side.right .meter .m { right: 0; }
+  .meter.full .m { background: linear-gradient(90deg, #fff, var(--gold), #fff); animation: pulse 0.3s infinite alternate; }
+  .meter-label { font-size: 11px; color: var(--dim); margin-top: 2px; letter-spacing: 1px; }
+  .side.right .meter-label { text-align: right; }
+  .timer { text-align: center; font-family: var(--font-display); font-size: 46px; line-height: 64px; height: 70px; background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.7); clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%); text-shadow: 0 3px 0 #000; }
+  .timer.low { color: #ff5a5a; }
+  .combo { position: absolute; top: 34%; font-family: var(--font-display); font-style: italic; text-shadow: 0 3px 0 #000, 0 0 18px rgba(0,0,0,0.6); opacity: 0; transition: opacity 0.25s; }
+  .combo.show { opacity: 1; }
+  .combo b { display: block; font-size: 64px; line-height: 1; color: var(--gold); }
+  .combo span { font-size: 22px; letter-spacing: 3px; }
+  #comboL { left: 4%; }
+  #comboR { right: 4%; text-align: right; }
+  /* COUNTER / PUNISH callout under the attacker's combo counter */
+  .callout { position: absolute; top: 26%; font-family: var(--font-display); font-style: italic; font-size: 30px; letter-spacing: 3px; color: #fff; text-shadow: 0 3px 0 #000, 0 0 16px var(--cc, #ff3b3b); opacity: 0; }
+  .callout.show { animation: calloutIn 0.9s ease-out forwards; }
+  @keyframes calloutIn { 0% { opacity: 0; transform: translateX(var(--from, -40px)) skewX(-12deg) scale(1.4); } 12% { opacity: 1; transform: translateX(0) skewX(-12deg) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translateX(0) skewX(-12deg) scale(1); } }
+  #calloutL { left: 4%; --from: -40px; }
+  #calloutR { right: 4%; --from: 40px; }
+  /* super move: the arena darkens and a cut-in band sweeps across with the
+     fighter's portrait and the move's name */
+  #superDim { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.25s; background: radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.7) 100%); }
+  #superDim.on { opacity: 1; }
+  #cutin { position: fixed; left: 0; right: 0; top: 30%; height: 150px; pointer-events: none; opacity: 0; overflow: hidden; }
+  #cutin.show { animation: cutinBand 1.25s cubic-bezier(.2,.9,.2,1) forwards; }
+  #cutin .band { position: absolute; inset: 0; transform: skewY(-4deg); background: linear-gradient(90deg, transparent 0%, var(--sc, #ff3b3b) 18%, var(--sc, #ff3b3b) 82%, transparent 100%); box-shadow: 0 0 40px var(--sc, #ff3b3b); opacity: 0.85; }
+  #cutin .band::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(255,255,255,0.12) 0 2px, transparent 2px 14px); }
+  #cutin img { position: absolute; top: -40px; height: 260%; object-fit: cover; object-position: 50% 8%; width: 240px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); filter: contrast(1.15) saturate(1.2); }
+  #cutin .name { position: absolute; top: 50%; transform: translateY(-50%) skewX(-10deg); font-family: var(--font-display); font-style: italic; color: #fff; text-shadow: 0 4px 0 #000, 0 0 24px rgba(0,0,0,0.8); white-space: nowrap; }
+  #cutin .name b { display: block; font-size: 54px; letter-spacing: 6px; line-height: 1; }
+  #cutin .name small { display: block; font-size: 16px; letter-spacing: 8px; color: #fff8d0; margin-top: 6px; }
+  #cutin.left img { left: 6%; } #cutin.left .name { left: calc(6% + 250px); }
+  #cutin.right img { right: 6%; } #cutin.right .name { right: calc(6% + 250px); text-align: right; }
+  @keyframes cutinBand { 0% { opacity: 0; transform: translateX(var(--cf, -60%)); } 14% { opacity: 1; transform: translateX(0); } 78% { opacity: 1; transform: translateX(0); } 100% { opacity: 0; transform: translateX(var(--ct, 30%)); } }
+  @media (max-width: 860px) { #cutin { height: 110px; } #cutin img { width: 150px; } #cutin.left .name { left: calc(4% + 150px); } #cutin.right .name { right: calc(4% + 150px); } #cutin .name b { font-size: 32px; } }
+  .warn { margin-top: 22px; max-width: min(520px, 86vw); font-size: 11px; line-height: 1.6; color: #8f8a80; text-align: center; }
+  #banner { position: absolute; top: 40%; left: 0; right: 0; text-align: center; font-family: var(--font-display); font-style: italic; font-size: clamp(48px, 9vw, 120px); letter-spacing: 6px; color: #fff; text-shadow: 0 6px 0 #000, 0 0 40px rgba(255, 80, 40, 0.8); transform: translateY(-50%) scale(1); opacity: 0; }
+  #banner.show { animation: bannerIn 0.35s cubic-bezier(.2,1.6,.4,1) forwards; }
+  #banner small { display: block; font-size: 0.24em; letter-spacing: 8px; color: var(--gold); margin-top: 6px; }
+  @keyframes bannerIn { from { opacity: 0; transform: translateY(-50%) scale(2.2); } to { opacity: 1; transform: translateY(-50%) scale(1); } }
+  #toast { position: absolute; top: 58%; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-style: italic; font-size: 28px; color: #9fe8ff; text-shadow: 0 3px 0 #000; opacity: 0; transition: opacity 0.2s; }
+  #toast.show { opacity: 1; }
+  #stats { position: absolute; right: 14px; bottom: 12px; font: 12px/1.5 Consolas, monospace; color: #cfe; text-align: right; background: rgba(0,0,0,0.45); padding: 6px 10px; border-radius: 6px; }
+  #keys { position: absolute; left: 14px; bottom: 12px; font-size: 12px; color: #ddd; background: rgba(0,0,0,0.45); padding: 8px 12px; border-radius: 6px; line-height: 1.7; }
+  #keys kbd { display: inline-block; min-width: 20px; padding: 0 5px; margin: 0 1px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font: 11px Consolas, monospace; text-align: center; background: rgba(255,255,255,0.08); }
+  #photoHint { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 20px; font-size: 14px; }
+
+  /* ---------- Screens ---------- */
+  .screen { position: fixed; inset: 0; display: flex; }
+  #loading { flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, #1a1220 0%, #050507 70%); z-index: 20; }
+  .logo { font-family: var(--font-display); font-style: italic; font-size: clamp(42px, 8vw, 96px); letter-spacing: 4px; line-height: 0.95; text-align: center; background: linear-gradient(180deg, #fff 0%, #ffd34d 55%, #ff5a2a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 6px 0 #000); }
+  .tag { margin-top: 10px; letter-spacing: 6px; font-size: 13px; color: var(--dim); text-align: center; }
+  .loadbar { margin-top: 36px; width: min(420px, 80vw); height: 6px; background: rgba(255,255,255,0.12); border-radius: 3px; overflow: hidden; }
+  .loadbar div { height: 100%; width: 0; background: linear-gradient(90deg, #ff5a2a, #ffd34d); transition: width 0.25s; }
+  #loadText { margin-top: 12px; font-size: 13px; color: var(--dim); min-height: 18px; }
+
+  #menu { pointer-events: none; z-index: 10; }
+  #menu > * { pointer-events: auto; }
+  .menu-left { position: absolute; top: 28px; left: 32px; max-width: 420px; }
+  .menu-left .logo { text-align: left; font-size: clamp(36px, 5.5vw, 72px); }
+  .menu-left .tag { text-align: left; }
+  .info { position: absolute; top: 28px; right: 32px; width: 300px; background: var(--panel); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 16px 18px; backdrop-filter: blur(6px); }
+  .info h2 { margin: 0; font-family: var(--font-display); font-style: italic; font-size: 34px; letter-spacing: 1px; }
+  .info .sub { color: var(--gold); font-size: 14px; letter-spacing: 3px; margin-top: 2px; }
+  .info .style { color: var(--dim); font-size: 13px; margin: 8px 0 12px; }
+  .stat { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); margin: 6px 0; }
+  .stat div { height: 7px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+  .stat div i { display: block; height: 100%; background: linear-gradient(90deg, #ff5a2a, #ffd34d); }
+  .badge { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: rgba(255, 211, 77, 0.08); border: 1px solid rgba(255, 211, 77, 0.3); font-size: 12px; color: #f3e3b0; line-height: 1.6; }
+  .roster-wrap { position: absolute; left: 0; right: 0; bottom: 22px; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0 16px; }
+  .row-label { font-size: 12px; letter-spacing: 4px; color: var(--dim); }
+  .roster { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .card { width: 104px; height: 132px; border-radius: 8px; overflow: hidden; position: relative; cursor: pointer; border: 2px solid rgba(255,255,255,0.15); background: #111; transition: transform 0.15s, border-color 0.15s; }
+  .card img { width: 100%; height: 200%; object-fit: cover; object-position: 50% 0; }
+  .card span { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 0; text-align: center; font-family: var(--font-display); font-style: italic; font-size: 13px; background: linear-gradient(0deg, rgba(0,0,0,0.9), transparent); }
+  .card:hover { transform: translateY(-4px); }
+  .card.p1 { border-color: var(--p1); box-shadow: 0 0 16px rgba(255, 59, 59, 0.6); }
+  .card.cpu { border-color: var(--p2); box-shadow: 0 0 16px rgba(46, 230, 255, 0.5); }
+  .card .tagp { position: absolute; top: 4px; left: 4px; font: bold 11px var(--font-ui); padding: 1px 6px; border-radius: 3px; }
+  .card.p1 .tagp { background: var(--p1); }
+  .card.cpu .tagp { background: var(--p2); color: #000; }
+  .controls-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .seg { display: flex; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; overflow: hidden; }
+  .seg button { background: none; border: 0; color: var(--dim); padding: 8px 14px; font: 13px var(--font-ui); cursor: pointer; }
+  .seg button.on { background: rgba(255,255,255,0.14); color: #fff; }
+  .seg .lbl { padding: 8px 10px; font-size: 12px; color: var(--dim); border-right: 1px solid rgba(255,255,255,0.1); }
+  .go { font-family: var(--font-display); font-style: italic; font-size: 22px; letter-spacing: 2px; padding: 10px 34px; border: 0; border-radius: 8px; cursor: pointer; color: #1a0f00; background: linear-gradient(180deg, #ffe46b, #ff8a1f); box-shadow: 0 4px 0 #8a3a00, 0 0 24px rgba(255, 140, 30, 0.5); }
+  .go:active { transform: translateY(2px); box-shadow: 0 2px 0 #8a3a00; }
+  .hint { font-size: 12px; color: var(--dim); }
+
+  #pause, #result { align-items: center; justify-content: center; background: rgba(0,0,0,0.6); z-index: 15; flex-direction: column; gap: 14px; }
+  #pause h1, #result h1 { font-family: var(--font-display); font-style: italic; font-size: 64px; margin: 0; letter-spacing: 4px; }
+  #result .sub { color: var(--gold); letter-spacing: 4px; }
+  .btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .btn { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 10px 22px; border-radius: 8px; font: 15px var(--font-ui); cursor: pointer; }
+  .btn:hover { background: rgba(255,255,255,0.2); }
+  .help { max-width: 640px; font-size: 13px; color: #ddd; line-height: 1.9; background: rgba(0,0,0,0.5); padding: 14px 18px; border-radius: 10px; }
+  .movelist { max-width: 760px; width: calc(100% - 32px); max-height: 38vh; overflow: auto; font-size: 13px; color: #ddd; background: rgba(0,0,0,0.5); padding: 12px 18px; border-radius: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+  .movelist h3 { grid-column: 1 / -1; margin: 2px 0 6px; font-family: var(--font-display); font-style: italic; font-size: 18px; letter-spacing: 2px; }
+  .movelist .row { display: flex; gap: 8px; align-items: baseline; line-height: 1.8; }
+  .movelist .keys { white-space: nowrap; min-width: 112px; }
+  .movelist .keys kbd { display: inline-block; min-width: 18px; padding: 0 4px; margin-right: 2px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font: 11px Consolas, monospace; text-align: center; }
+  .movelist .fin { color: var(--gold); }
+  @media (max-width: 640px) { .movelist { grid-template-columns: 1fr; } }
+  .help kbd { display: inline-block; min-width: 20px; padding: 0 5px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font: 11px Consolas, monospace; text-align: center; }
+
+  @media (max-width: 860px) {
+    .info { display: none; }
+    .menu-left { left: 16px; top: 16px; }
+    #keys { display: none; }
+    .portrait { width: 44px; height: 44px; }
+    .bars { grid-template-columns: 1fr 64px 1fr; }
+    .timer { font-size: 32px; line-height: 50px; height: 54px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="superDim"></div>
+<canvas id="fx"></canvas>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div id="cutin"><div class="band"></div><img alt=""><div class="name"><b></b><small></small></div></div>
+
+<div id="hud" class="hidden">
+  <div class="bars">
+    <div class="side left" id="sideL">
+      <div class="portrait"><img id="portL" alt=""></div>
+      <div class="meta">
+        <div class="nameplate"><span id="nameL">P1</span><span class="wins" id="winsL"><i></i><i></i></span></div>
+        <div class="hp" id="hpL"><div class="lag"></div><div class="fill"></div></div>
+        <div class="meter" id="meterL"><div class="m"></div></div>
+        <div class="meter-label" id="meterLabelL">必杀槽</div>
+      </div>
+    </div>
+    <div class="timer" id="timer">60</div>
+    <div class="side right" id="sideR">
+      <div class="portrait"><img id="portR" alt=""></div>
+      <div class="meta">
+        <div class="nameplate"><span id="nameR">CPU</span><span class="wins" id="winsR"><i></i><i></i></span></div>
+        <div class="hp" id="hpR"><div class="lag"></div><div class="fill"></div></div>
+        <div class="meter" id="meterR"><div class="m"></div></div>
+        <div class="meter-label" id="meterLabelR">必杀槽</div>
+      </div>
+    </div>
+  </div>
+  <div class="combo" id="comboL"><b>0</b><span>HITS</span></div>
+  <div class="combo" id="comboR"><b>0</b><span>HITS</span></div>
+  <div class="callout" id="calloutL"></div>
+  <div class="callout" id="calloutR"></div>
+  <div id="banner"></div>
+  <div id="toast"></div>
+  <div id="keys">
+    <kbd>A</kbd><kbd>D</kbd> 移动 &nbsp;<kbd>W</kbd><kbd>S</kbd> 侧移 &nbsp;<kbd>J</kbd> 拳 &nbsp;<kbd>U</kbd> 踢 &nbsp;<kbd>K</kbd> 跳跃 &nbsp;<kbd>L</kbd> 防御 &nbsp;<kbd>空格</kbd> 闪避 &nbsp;<kbd>I</kbd> 必杀<br>
+    组合键：<kbd>S</kbd>+<kbd>J</kbd> 技能一 · <kbd>S</kbd>+<kbd>U</kbd> 技能二 · <kbd>W</kbd>+<kbd>J</kbd> 投技 · <kbd>W</kbd>+<kbd>U</kbd> 回旋踢 · <kbd>A</kbd>/<kbd>D</kbd>+<kbd>J</kbd>/<kbd>U</kbd> 冲步/后撤招<br>
+    拖动鼠标 旋转视角 · 滚轮 缩放 · <kbd>P</kbd> 拍照模式 · <kbd>Q</kbd> 画质 · <kbd>Esc</kbd> 暂停
+  </div>
+  <div id="photoHint" class="hidden">拍照模式 · 拖动旋转 · 滚轮缩放 · <b>P</b> 返回战斗 · <b>H</b> 隐藏界面</div>
+</div>
+<div id="stats" class="hidden"></div>
+
+<div id="loading" class="screen">
+  <div class="logo">SPLAT<br>FIGHTER</div>
+  <div class="tag">PINOC 高斯泼溅格斗</div>
+  <div class="loadbar"><div id="loadFill"></div></div>
+  <div id="loadText">正在启动引擎…</div>
+  <div class="warn">光敏性提示：本游戏包含闪光与快速画面变化。若你或家人有光敏性癫痫病史，请在选人界面把「特效」设为「柔和」，并在游玩时如有不适立即停止。</div>
+</div>
+
+<div id="menu" class="screen hidden">
+  <div class="menu-left">
+    <div class="logo">SPLAT<br>FIGHTER</div>
+    <div class="tag">每个角色都是 PINOC 重建的 3D 高斯</div>
+  </div>
+  <div class="info" id="info">
+    <h2 id="infoName"></h2>
+    <div class="sub" id="infoTitle"></div>
+    <div class="style" id="infoStyle"></div>
+    <div class="style" id="infoSig" style="color:#f3e3b0;margin-top:-6px"></div>
+    <div class="stat">力量<div><i id="stPow"></i></div></div>
+    <div class="stat">速度<div><i id="stSpd"></i></div></div>
+    <div class="stat">体力<div><i id="stHp"></i></div></div>
+    <div class="badge" id="infoBadge"></div>
+  </div>
+  <div class="roster-wrap">
+    <div class="row-label">点击选择你的角色 · 右键选择对手 · 拖动画面旋转查看</div>
+    <div class="roster" id="roster"></div>
+    <div class="controls-row">
+      <div class="seg" id="stage"><span class="lbl">地图</span></div>
+      <div class="seg" id="diff"><span class="lbl">难度</span><button data-v="easy">入门</button><button data-v="normal" class="on">普通</button><button data-v="hard">高手</button></div>
+      <div class="seg" id="qual"><span class="lbl">画质</span><button data-v="high" class="on">高（48K）</button><button data-v="perf">标准（16K）</button><button data-v="low">流畅（老机型）</button></div>
+      <div class="seg" id="fxmode"><span class="lbl">特效</span><button data-v="full" class="on">标准</button><button data-v="soft">柔和（减弱闪光与震屏）</button></div>
+      <button class="go" id="start">开始战斗</button>
+    </div>
+    <div class="hint">J 拳 · U 踢 · K 跳跃（空中 J/U 飞踢） · L 防御 · 空格 闪避 · I 必杀 · 连招：J J J / J J U / J U U / U U · 后退+J 上勾拳 · 后退+U 侧踢 · 支持手柄</div>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <h1>PAUSE</h1>
+  <div class="help">
+    <kbd>A</kbd>/<kbd>D</kbd> 前后移动（以屏幕方向为准） · <kbd>W</kbd>/<kbd>S</kbd> 侧移绕步<br>
+    <kbd>J</kbd> 拳 · <kbd>U</kbd> 踢 · <kbd>L</kbd> 按住防御 · <kbd>空格</kbd> 闪避（按住前进 = 前滚）<br>
+    <kbd>K</kbd> 跳跃（按住 <kbd>A</kbd>/<kbd>D</kbd> = 后跳/前跳） · 空中按 <kbd>J</kbd> 或 <kbd>U</kbd> = 飞踢（击倒）<br>
+    连招按键可以提前连续按下，会按顺序依次出招（每个角色的连招见下方招式表）<br>
+    手柄：左摇杆移动 · X 拳 · Y 踢 · B 跳跃 · RB 防御 · A 闪避 · RT 必杀 · 右摇杆视角
+  </div>
+  <div class="movelist" id="moveList"></div>
+  <div class="btns"><button class="btn" id="resume">继续</button><button class="btn" id="restart">重新开始</button><button class="btn" id="toMenu">返回选人</button></div>
+</div>
+
+<div id="result" class="screen hidden">
+  <h1 id="resultTitle">YOU WIN</h1>
+  <div class="sub" id="resultSub"></div>
+  <div class="btns"><button class="btn" id="again">再来一局</button><button class="btn" id="resultMenu">返回选人</button></div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
