@@ -1,3 +1,6 @@
+# private drafts (promo posts) - kept locally, never published
+推文*.md
+
 # local test captures and tool config
 .debug/
 .claude/

@@ -1,6 +1,6 @@
 // Splat Fighter - a 1v1 fighting game whose fighters and arena are PINOC
 // Gaussian splats rendered by @viggle/splat-engine on PlayCanvas.
-import { Scene, Character, Animation, Environment } from '@viggle/splat-engine';
+import { Scene, Character, Animation, Environment, setAssetFetch } from '@viggle/splat-engine';
 import { Quat, Vec3 } from 'playcanvas';
 import { ROSTER, CLIPS, TUNING, ARENA, STAGES, MOVES, STARTERS, COMBOS } from './config.js';
 import { Fighter } from './fighter.js';
@@ -163,8 +163,10 @@ class Game {
 
     this.progress(0.76, '正在载入 4 名高斯格斗家…');
     done = 0;
+    // (phones show the menu fighters at 16K splats: a third of the memory and download)
+    const mobile = isTouchDevice();
     this.previews = await Promise.all(ROSTER.map(async (def) => {
-      const c = await Character.load(this.scene, def.high, { name: `preview_${def.id}` });
+      const c = await Character.load(this.scene, mobile ? def.perf : def.high, { name: `preview_${def.id}` });
       c.prepareReveal();
       c.setActive(false);
       done++;
@@ -1420,9 +1422,49 @@ class Game {
   }
 }
 
+// Every engine download (scenes, fighters, ~130 motion clips) goes through
+// here. Phones on a weak connection drop requests - iPhone Safari reports it
+// as "Load failed" - and starting all of them at once made that likelier;
+// one lost clip used to stop the whole start-up. So: a few downloads at a
+// time, and a dropped one is retried with a growing pause.
+const MAX_PARALLEL = isTouchDevice() ? 6 : 12;
+let running = 0;
+const waiting = [];
+const slot = () => (running < MAX_PARALLEL ? (running++, Promise.resolve()) : new Promise((r) => waiting.push(r)));
+const release = () => { const next = waiting.shift(); if (next) next(); else running--; };
+let lastFailedUrl = '';
+// ?flaky=0.25 drops that share of downloads on purpose, to test the retries
+const FLAKY = Number(new URLSearchParams(location.search).get('flaky')) || 0;
+let dropped = 0;
+setAssetFetch(async (url, init) => {
+  await slot();
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        if (FLAKY && Math.random() < FLAKY) { dropped++; window.__droppedDownloads = dropped; throw new TypeError('Load failed (simulated)'); }
+        const res = await fetch(url, init);
+        // server hiccups are worth another try; a missing file is not
+        if ((res.status >= 500 || res.status === 429) && attempt < 5) throw new Error(`HTTP ${res.status}`);
+        return res;
+      } catch (e) {
+        if (init?.signal?.aborted || attempt >= 5) { lastFailedUrl = String(url); throw e; }
+        await sleep(600 * 2 ** attempt); // 0.6 s, 1.2 s, 2.4 s, 4.8 s, 9.6 s
+      }
+    }
+  } finally { release(); }
+});
+
 const game = new Game();
 window.__game = game;
 game.boot().catch((e) => {
   console.error(e);
-  $('loadText').textContent = `启动失败：${e.message || e}`;
+  const file = lastFailedUrl ? `（${lastFailedUrl.split('/').pop().split('?')[0]}）` : '';
+  $('loadText').textContent = `启动失败：${e.message || e}${file}。可能是网络不稳定，请换个网络或点下面重试。`;
+  if (!$('retryBoot')) {
+    const b = document.createElement('button');
+    b.id = 'retryBoot'; b.className = 'btn'; b.textContent = '重试';
+    b.style.marginTop = '14px';
+    b.addEventListener('click', () => location.reload());
+    $('loading').appendChild(b);
+  }
 });
