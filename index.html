@@ -15,13 +15,13 @@
   "spz-js": "./vendor/spz-js/package/dist/index.js",
   "zstddec": "./vendor/zstddec/package/dist/zstddec.mjs",
   "@viggle/splat-engine": "./vendor/splat-engine/package/dist/index.js",
-  "./src/config.js": "./src/config.js?v=4",
-  "./src/fighter.js": "./src/fighter.js?v=4",
-  "./src/ai.js": "./src/ai.js?v=4",
-  "./src/camera.js": "./src/camera.js?v=4",
-  "./src/fx.js": "./src/fx.js?v=4",
-  "./src/input.js": "./src/input.js?v=4",
-  "./src/touch.js": "./src/touch.js?v=4"
+  "./src/config.js": "./src/config.js?v=5",
+  "./src/fighter.js": "./src/fighter.js?v=5",
+  "./src/ai.js": "./src/ai.js?v=5",
+  "./src/camera.js": "./src/camera.js?v=5",
+  "./src/fx.js": "./src/fx.js?v=5",
+  "./src/input.js": "./src/input.js?v=5",
+  "./src/touch.js": "./src/touch.js?v=5"
 } }
 </script>
 <!-- ?v= : the game's own scripts are versioned so a browser never mixes a
@@ -174,6 +174,10 @@
 
   /* ---------- Touch controls (phones / tablets) ---------- */
   html, body { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  /* iPhone Safari: a held or dragged finger selects text and pops up the copy
+     menu unless selection is off on every element (the unprefixed property
+     alone is not enough there) */
+  body.touch, body.touch * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   #touch { position: absolute; inset: 0; pointer-events: none; display: none; }
   body.touch #touch { display: block; }
   body.touch #keys { display: none; }
@@ -387,6 +391,6 @@
   <div class="btns"><button class="btn" id="again">再来一局</button><button class="btn" id="resultMenu">返回选人</button></div>
 </div>
 
-<script type="module" src="./src/main.js?v=4"></script>
+<script type="module" src="./src/main.js?v=5"></script>
 </body>
 </html>

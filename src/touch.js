@@ -26,6 +26,22 @@ export class TouchControls {
     this.knob = root.querySelector('.stick-knob');
     this.bindStick();
     for (const b of root.querySelectorAll('[data-act]')) this.bindButton(b);
+    // iPhone Safari: cancel the touch itself on the stick and the action
+    // buttons, or a held / dragged finger brings up the text-selection loupe
+    // and the copy menu, and a quick double tap zooms. (Pointer events still
+    // arrive; only the browser's own gestures are stopped. Not on the buttons
+    // that rely on a click, which this would swallow.)
+    const stop = (e) => { if (e.cancelable) e.preventDefault(); };
+    for (const el of [this.zone, ...root.querySelectorAll('[data-act]')]) {
+      el.addEventListener('touchstart', stop, { passive: false });
+      el.addEventListener('touchmove', stop, { passive: false });
+    }
+    // anywhere else (the canvas, the HUD): no selection and no press-and-hold menu
+    document.addEventListener('selectstart', (e) => e.preventDefault());
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+    const view = document.getElementById('view');
+    view?.addEventListener('touchstart', stop, { passive: false });
+    view?.addEventListener('touchmove', stop, { passive: false });
   }
 
   bindStick() {

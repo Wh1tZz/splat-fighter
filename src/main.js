@@ -88,6 +88,10 @@ class Game {
     // high (48K splats) | perf (16K) | low (16K, 70% resolution, light effects)
     // - a saved choice wins, else a guess from the device (see detectQuality)
     this.quality = Game.savedQuality() || Game.detectQuality();
+    // lighter scenes on phones / tablets and on machines that start on the
+    // light tier (?full forces the full scenes, ?lite the light ones)
+    const qs = new URLSearchParams(location.search);
+    this.useLiteStages = qs.has('lite') || (!qs.has('full') && (isTouchDevice() || this.quality === 'low'));
     this.difficulty = 'normal';
     this.showGhosts = true;
     this.p1Index = 0;
@@ -1279,7 +1283,11 @@ class Game {
     const st = STAGES.find((x) => x.id === id) || STAGES[0];
     const ticket = (this.stageTicket = (this.stageTicket || 0) + 1);
     // (?v= busts the browser cache when a scene file is replaced)
-    const env = await Environment.load(this.scene, `${st.url}?v=${MOTION_VERSION}`, { name: `stage_${st.id}`, filename: st.url.split('/').pop() });
+    // Phones and the light tier load each scene's lite copy: the 35% of its
+    // splats that carry the picture (big and opaque ones), each grown a little
+    // to close the gaps - a third of the sorting and drawing, 5 MB not 16 MB
+    const url = this.useLiteStages ? st.url.replace(/\.spz$/, '.lite.spz') : st.url;
+    const env = await Environment.load(this.scene, `${url}?v=${MOTION_VERSION}`, { name: `stage_${st.id}`, filename: url.split('/').pop() });
     // a newer pick arrived while this one loaded
     if (ticket !== this.stageTicket) { env.destroy(); return; }
     let depth = st.floorDepthUnits ?? ARENA.floorDepthUnits;
@@ -1340,7 +1348,11 @@ class Game {
     const dev = this.scene?.app.graphicsDevice;
     if (dev) {
       const dpr = window.devicePixelRatio || 1;
-      const ratio = q === 'low' ? 0.7 : q === 'perf' ? Math.min(dpr, 1.25) : Math.min(dpr, 2);
+      // phones have 3x screens and small GPUs: splat drawing is fill-bound, so
+      // they render nearer 1x (high 1.5x, standard 1x, light 0.75x)
+      const ratio = isTouchDevice()
+        ? Math.min(dpr, q === 'low' ? 0.75 : q === 'perf' ? 1 : 1.5)
+        : q === 'low' ? 0.7 : q === 'perf' ? Math.min(dpr, 1.25) : Math.min(dpr, 2);
       // (the engine sizes the canvas from a ResizeObserver that only fires when
       // the element changes size, and app.resizeCanvas is a no-op there: set
       // the new resolution directly; later window resizes keep the cap)

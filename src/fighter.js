@@ -125,6 +125,9 @@ export class Fighter {
   async load(scene) {
     this.character = await Character.load(scene, [this.def.high, this.def.perf], { name: `${this.def.id}_${this.slot}` });
     this.character.disableRenderLod();
+    // phones: re-sort the fighter's splats every other frame (the CPU's biggest
+    // per-character job); the pose itself still updates every frame
+    if (this.game.input?.touch) this.character.armature?.setSortLod?.({ nearDist: 0, farDist: 0.01, nearStride: 2, farStride: 2 });
     this.character.prepareReveal();
     this.character.setReveal(0);
     const loads = [];
