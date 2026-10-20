@@ -535,7 +535,7 @@ import { ShaderChunks, SHADERLANGUAGE_GLSL, SHADERLANGUAGE_WGSL } from "playcanv
 var GLSL_OUT = "camera_params.w != 1.0 && centerView.z > 0.0";
 var GLSL_PATCH = "(camera_params.w != 1.0 ? centerView.z > 0.0 : -centerView.z < camera_params.z)";
 var WGSL_OUT = "uniform.camera_params.w != 1.0 && centerView.z > 0.0";
-var WGSL_PATCH = "select(-centerView.z < uniform.camera_params.z, centerView.z > 0.0, uniform.camera_params.w != 1.0)";
+var WGSL_PATCH = "select((-centerView.z < uniform.camera_params.z), (centerView.z > 0.0), (uniform.camera_params.w != 1.0))";
 function installOrthoNearCull(device) {
   const patches = [
     [SHADERLANGUAGE_GLSL, GLSL_OUT, GLSL_PATCH],
@@ -3511,6 +3511,12 @@ var Scene = class _Scene {
       // or browser unsupported, or `backend: 'webgl'`) pay zero bytes.
       ...opts?.glslangUrl && opts?.twgslUrl ? { glslangUrl: opts.glslangUrl, twgslUrl: opts.twgslUrl } : {}
     });
+    // PlayCanvas can silently return a NullGraphicsDevice after both real
+    // backends fail. Reject it instead of showing a working UI on a black canvas.
+    if (!graphicsDevice.isWebGPU && !graphicsDevice.isWebGL2) {
+      graphicsDevice.destroy();
+      throw new Error("No usable WebGPU or WebGL2 graphics device. Enable browser graphics acceleration.");
+    }
     if (opts?.logDeviceCaps) {
       console.log("[SplatEngine] device caps", _Scene.getDeviceCapabilities(graphicsDevice));
     }
@@ -3578,15 +3584,20 @@ var Scene = class _Scene {
           const cap = device.maxPixelRatio;
           const pixelRatio = Math.min(window.devicePixelRatio, cap);
           let w, h;
-          if (entry.devicePixelContentBoxSize) {
+          const physical = entry.devicePixelContentBoxSize;
+          const content = entry.contentBoxSize;
+          const physicalBox = physical && (physical[0] || physical);
+          const contentBox = content && (content[0] || content);
+          if (physicalBox?.inlineSize !== undefined) {
             const scale = pixelRatio / window.devicePixelRatio;
-            w = Math.ceil(entry.devicePixelContentBoxSize[0].inlineSize * scale);
-            h = Math.ceil(entry.devicePixelContentBoxSize[0].blockSize * scale);
-          } else if (entry.contentBoxSize.length > 0) {
-            w = Math.ceil(entry.contentBoxSize[0].inlineSize * pixelRatio);
-            h = Math.ceil(entry.contentBoxSize[0].blockSize * pixelRatio);
+            w = Math.ceil(physicalBox.inlineSize * scale);
+            h = Math.ceil(physicalBox.blockSize * scale);
+          } else if (contentBox?.inlineSize !== undefined) {
+            w = Math.ceil(contentBox.inlineSize * pixelRatio);
+            h = Math.ceil(contentBox.blockSize * pixelRatio);
           } else {
-            return;
+            w = Math.ceil(entry.contentRect.width * pixelRatio);
+            h = Math.ceil(entry.contentRect.height * pixelRatio);
           }
           if (w > 0 && h > 0) pendingSize = { w, h };
         }
@@ -5391,13 +5402,20 @@ var AnimationPlayer = class {
       console.warn(`[AnimationPlayer] Animation "${name}" has no keyframes`);
       return null;
     }
-    const innerKey = `${this._skeleton.numBones}:${loop ? 1 : 0}:${restPoseId(this._skeleton.restPose)}`;
+    const innerKey = `${this._skeleton.numBones}:${loop ? 1 : 0}`;
     let perAnim = _sharedKeyframeCache.get(animData);
     if (!perAnim) {
-      perAnim = /* @__PURE__ */ new Map();
+      perAnim = /* @__PURE__ */ new WeakMap();
       _sharedKeyframeCache.set(animData, perAnim);
     }
-    let kf = perAnim.get(innerKey);
+    // Keep the rest pose weakly: destroyed fighters and calibration probes
+    // must not pin all of their converted clips in the scene library.
+    let perRest = perAnim.get(this._skeleton.restPose);
+    if (!perRest) {
+      perRest = new Map();
+      perAnim.set(this._skeleton.restPose, perRest);
+    }
+    let kf = perRest.get(innerKey);
     if (!kf) {
       kf = buildArmatureKeyframes(
         store.keyframes,
@@ -5407,7 +5425,7 @@ var AnimationPlayer = class {
         loop,
         animData.translationMask
       );
-      perAnim.set(innerKey, kf);
+      perRest.set(innerKey, kf);
     }
     return kf;
   }

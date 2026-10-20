@@ -1,7 +1,7 @@
 // Splat Fighter - a 1v1 fighting game whose fighters and arena are PINOC
 // Gaussian splats rendered by @viggle/splat-engine on PlayCanvas.
 import { Scene, Character, Animation, Environment, setAssetFetch } from '@viggle/splat-engine';
-import { Quat, Vec3 } from 'playcanvas';
+import { Quat, Vec3, GSPLAT_RENDERER_RASTER_GPU_SORT } from 'playcanvas';
 import { ROSTER, CLIPS, TUNING, ARENA, STAGES, MOVES, STARTERS, COMBOS } from './config.js';
 import { Fighter } from './fighter.js';
 import { AI, DIFFICULTY } from './ai.js';
@@ -12,7 +12,7 @@ import { isTouchDevice } from './touch.js';
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const MOTION_VERSION = 14;
+const MOTION_VERSION = 15;
 
 // Where a strike can actually touch someone. For every frame of the move it
 // samples each striking joint (fists, feet, elbows, knees) around the move's
@@ -116,6 +116,7 @@ class Game {
   progress(p, text) {
     $('loadFill').style.width = `${Math.round(p * 100)}%`;
     if (text) $('loadText').textContent = text;
+    window.splatCompatibility?.progress();
   }
 
   async boot() {
@@ -123,11 +124,16 @@ class Game {
     this.scene = await Scene.create(this.canvas, {
       fov: 46, near: 0.05, far: 200, maxPixelRatio: 1, gsplatCulling: !new URLSearchParams(location.search).has('nocull'),
       // ?webgl forces the WebGL2 path older machines get (for testing)
-      ...(new URLSearchParams(location.search).has('webgl') ? { backend: 'webgl' } : {}),
+      ...(window.splatCompatibility?.mode === 'webgl' ? { backend: 'webgl' } : {}),
       preserveDrawingBuffer: new URLSearchParams(location.search).has('debug'),
       bgColor: { r: 0.02, g: 0.02, b: 0.03, a: 1 },
       cameraPosition: { x: 0, y: 1.6, z: 5 }, cameraTarget: { x: 0, y: 1, z: 0 },
     });
+    window.splatCompatibility?.watch(this.scene);
+    if (window.splatCompatibility?.mode === 'raster' && this.scene.graphicsDevice.isWebGPU) {
+      // Retain GPU sorting and all splats, avoiding the compute tile renderer.
+      this.scene.app.scene.gsplat.renderer = GSPLAT_RENDERER_RASTER_GPU_SORT;
+    }
     this.scene.start();
     this.camera = new FightCamera(this.scene, this.canvas);
     this.fx = new FX($('fx'), this.camera);
@@ -136,7 +142,9 @@ class Game {
 
     this.progress(0.08, '正在载入 PINOC 高斯擂台…');
     this.stageId = Game.savedStage();
-    await this.loadStage(this.stageId);
+    const stageReady = this.loadStage(this.stageId);
+    // Observe failures immediately while independent animation work proceeds.
+    stageReady.catch(() => {});
 
     // shared clips plus every character's own stance, signature moves, special and win pose
     const own = new Set();
@@ -154,6 +162,7 @@ class Game {
       this.progress(0.45 + 0.3 * (done / urls.length));
     }));
 
+    await stageReady;
     this.progress(0.74, '正在校准动作朝向…');
     await this.measureClipHeadings();
     // A clip can't be crossfaded into itself, so loops alternate between the
@@ -175,13 +184,14 @@ class Game {
       return c;
     }));
 
-    this.warmTileRenderer();
+    await this.warmTileRenderer();
     this.progress(1, '完成');
     this.bindUI();
     this.scene.app.on('update', (dt) => this.update(dt));
     await sleep(250);
     $('loading').classList.add('hidden');
     this.enterMenu();
+    window.splatCompatibility?.ready();
   }
 
   // Memory: PINOC clips carry tracks for all 441 bones of the full MetaHuman
@@ -211,7 +221,9 @@ class Game {
   // fighters' heads cut off flat, blocky patches. Once grown, they stay grown.
   // So grow them now, under the loading screen: every fighter overlapped at
   // the origin, filmed from half a metre away for a few frames.
-  warmTileRenderer() {
+  async warmTileRenderer() {
+    // Raster backends have no tile lists to grow.
+    if (!this.scene.graphicsDevice.isWebGPU || window.splatCompatibility?.mode === 'raster') return;
     const cam = this.scene.cameraEntity;
     if (!cam) return;
     const pos = cam.getPosition().clone(), rot = cam.getRotation().clone();
@@ -220,7 +232,10 @@ class Game {
       for (const [y, d] of [[1.4, 0.45], [1.0, 0.5], [0.6, 0.5]]) {
         cam.setPosition(0, y, d);
         cam.lookAt(0, y - 0.05, 0);
-        for (let k = 0; k < 3; k++) this.scene.app.render();
+        // Let the app perform frameStart / render / frameEnd normally.
+        // Calling render() repeatedly here reuses a WebGPU backbuffer outside
+        // its frame lifecycle and can invalidate commands on some drivers.
+        for (let k = 0; k < 3; k++) await new Promise((resolve) => requestAnimationFrame(resolve));
       }
     } catch (e) {
       console.warn('tile warm-up skipped', e);
@@ -1336,7 +1351,11 @@ class Game {
     old?.destroy();
     // warm the env tint path (supers darken the arena with it): its first use
     // rebuilt the env's work buffer mid-fight and left a band of stale tiles
-    try { env.setTint(0.01); this.scene.app.render(); env.setTint(0); } catch { /* optional */ }
+    try {
+      env.setTint(0.01);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      env.setTint(0);
+    } catch { /* optional */ }
     try { this.envSplats = env.asset.resource.gsplatData?.numSplats ?? env.asset.resource.numSplats ?? 0; } catch { this.envSplats = 0; }
     try { localStorage.setItem('splatFighter.stage', st.id); } catch { /* storage blocked */ }
   }
@@ -1479,14 +1498,5 @@ setAssetFetch(async (url, init) => {
 const game = new Game();
 window.__game = game;
 game.boot().catch((e) => {
-  console.error(e);
-  const file = lastFailedUrl ? `（${lastFailedUrl.split('/').pop().split('?')[0]}）` : '';
-  $('loadText').textContent = `启动失败：${e.message || e}${file}。可能是网络不稳定，请换个网络或点下面重试。`;
-  if (!$('retryBoot')) {
-    const b = document.createElement('button');
-    b.id = 'retryBoot'; b.className = 'btn'; b.textContent = '重试';
-    b.style.marginTop = '14px';
-    b.addEventListener('click', () => location.reload());
-    $('loading').appendChild(b);
-  }
+  window.splatCompatibility.bootFailed(e, lastFailedUrl);
 });
