@@ -122,8 +122,13 @@ export class Fighter {
     this.resetForRound();
   }
 
-  async load(scene) {
-    this.character = await Character.load(scene, [this.def.high, this.def.perf], { name: `${this.def.id}_${this.slot}` });
+  async load(scene, { inactive = false, quality = this.game.quality } = {}) {
+    const high = quality === 'high';
+    // Standard / mobile players never use the 48K cloud. Load it only when
+    // high quality is actually selected; a later upgrade uses addLodLevel.
+    this.character = await Character.load(scene, high ? [this.def.high, this.def.perf] : this.def.perf, { name: `${this.def.id}_${this.slot}` });
+    this.renderLevels = high ? { high: 0, perf: 1 } : { perf: 0 };
+    if (inactive) this.character.setActive(false);
     this.character.disableRenderLod();
     // phones: re-sort the fighter's splats every other frame (the CPU's biggest
     // per-character job); the pose itself still updates every frame
@@ -132,14 +137,16 @@ export class Fighter {
     this.character.setReveal(0);
     const loads = [];
     // (the light tier keeps two: each copy is a whole 16K-splat character)
-    const ghosts = this.game.quality === 'low' ? 2 : GHOSTS;
-    for (let i = 0; i < ghosts; i++) loads.push(Character.load(scene, this.def.perf, { name: `${this.def.id}_${this.slot}_ghost${i}` }));
-    this.ghosts = await Promise.all(loads);
-    for (const g of this.ghosts) {
-      g.prepareReveal();
-      g.setActive(false);
-    }
-    this.setQuality(this.game.quality);
+    const ghosts = quality === 'low' ? 2 : GHOSTS;
+    for (let i = 0; i < ghosts; i++) loads.push(Character.load(scene, this.def.perf, { name: `${this.def.id}_${this.slot}_ghost${i}` }).then((g) => {
+      // A warmed copy must never flash onto the selection screen.
+      g.setActive(false); g.prepareReveal(); return g;
+    }));
+    const results = await Promise.allSettled(loads);
+    this.ghosts = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+    const failed = results.find((r) => r.status === 'rejected');
+    if (failed) throw failed.reason;
+    this.setQuality(quality);
     this.installFlinch();
     this.play('stance', { loop: true, fade: 0 });
     this.applyTransform(true);
@@ -242,14 +249,30 @@ export class Fighter {
   }
 
   destroy() {
+    this.destroyed = true;
     this.character?.destroy();
     for (const g of this.ghosts) g.destroy();
     this.ghosts = [];
   }
 
   setQuality(q) {
-    if (!this.character) return;
-    this.character.setRenderLevel(q === 'high' ? 0 : 1);
+    if (!this.character || this.destroyed) return;
+    this.requestedQuality = q;
+    const level = this.renderLevels[q === 'high' ? 'high' : 'perf'];
+    if (level !== undefined) { this.character.setRenderLevel(level); return; }
+    if (!this.highReady) {
+      this.highReady = this.character.addLodLevel(this.def.high).then(() => {
+        if (this.destroyed) return;
+        this.renderLevels.high = this.character.splats.length - 1;
+        this.character.prepareReveal();
+        if (this.requestedQuality === 'high') this.character.setRenderLevel(this.renderLevels.high);
+      }).catch((error) => {
+        this.highReady = null;
+        if (!this.destroyed) this.game.toast('高画质资源加载失败，请稍后重试');
+        console.warn('high-quality character load failed', error);
+      });
+    }
+    return this.highReady;
   }
 
   get splatCount() {

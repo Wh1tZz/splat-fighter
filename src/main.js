@@ -4,6 +4,7 @@ import { Scene, Character, Animation, Environment, setAssetFetch } from '@viggle
 import { Quat, Vec3, GSPLAT_RENDERER_RASTER_GPU_SORT } from 'playcanvas';
 import { ROSTER, CLIPS, TUNING, ARENA, STAGES, MOVES, STARTERS, COMBOS } from './config.js';
 import { Fighter } from './fighter.js';
+import { MatchLoader } from './match-loader.js';
 import { AI, DIFFICULTY } from './ai.js';
 import { FightCamera } from './camera.js';
 import { FX } from './fx.js';
@@ -98,6 +99,7 @@ class Game {
     this.cpuIndex = 1;
     this.previews = [];
     this.fighters = [];
+    this.matchLoader = new MatchLoader((pair) => pair.forEach((f) => f.destroy()));
     this.wins = [0, 0];
     this.round = 1;
     this.timeScale = 1;
@@ -586,6 +588,7 @@ class Game {
       }
       c._shownSlot = slot;
     });
+    this.scheduleMatchPreparation();
   }
 
   runReveal(ch, dur, { inverse = false, delay = 0 } = {}) {
@@ -611,33 +614,72 @@ class Game {
     if (this.photo) this.togglePhoto();
   }
 
+  matchRequest() {
+    const indices = [this.p1Index, this.cpuIndex];
+    const quality = this.quality;
+    return { key: indices.join(':') + ':' + quality, create: async () => {
+      const pair = indices.map((index, slot) => new Fighter(this, ROSTER[index], slot));
+      pair[0].opponent = pair[1]; pair[1].opponent = pair[0];
+      // Capture the tier: menu selections may change while this batch loads.
+      const results = await Promise.allSettled(pair.map((f) => f.load(this.scene, { inactive: true, quality })));
+      const failed = results.find((r) => r.status === 'rejected');
+      if (failed) { pair.forEach((f) => f.destroy()); throw failed.reason; }
+      return pair;
+    }};
+  }
+
+  scheduleMatchPreparation() {
+    clearTimeout(this.prepareMatchTimer);
+    if (this.phase !== 'menu') return;
+    this.prepareMatchTimer = setTimeout(() => {
+      if (this.phase !== 'menu') return;
+      const request = this.matchRequest();
+      this.matchLoader.prepare(request.key, request.create);
+    }, 180);
+  }
+
   async startMatch() {
+    if (this.phase === 'loadingMatch') return;
+    clearTimeout(this.prepareMatchTimer);
     this.clearMatch();
     this.phase = 'loadingMatch';
-    $('menu').classList.add('hidden');
-    $('result').classList.add('hidden');
-    for (const c of this.previews) c.setActive(false);
-    this.toast('正在载入角色…', 4000);
+    // Keep the selected models visible until the fully prepared pair takes over.
+    // No empty arena while the phone decodes characters and ghost copies.
+    const start = $('start');
+    const label = start.textContent;
+    start.disabled = true; start.textContent = '正在准备战斗…';
+    $('menu').inert = true;
+    this.toast('正在准备战斗…', 60000);
+    try {
+      const request = this.matchRequest();
+      const [a, b] = await this.matchLoader.take(request.key, request.create);
+      $('menu').classList.add('hidden');
+      $('result').classList.add('hidden');
+      for (const c of this.previews) c.setActive(false);
+      a.character.setActive(true); b.character.setActive(true);
+      a.meter = 0; b.meter = 0;
+      this.fighters = [a, b];
+      this.p1 = a; this.cpu = b;
+      this.ai = new AI(b, this.difficulty);
+      this.wins = [0, 0];
+      this.round = 1;
 
-    const a = new Fighter(this, ROSTER[this.p1Index], 0);
-    const b = new Fighter(this, ROSTER[this.cpuIndex], 1);
-    a.opponent = b; b.opponent = a;
-    await Promise.all([a.load(this.scene), b.load(this.scene)]);
-    a.meter = 0; b.meter = 0;
-    this.fighters = [a, b];
-    this.p1 = a; this.cpu = b;
-    this.ai = new AI(b, this.difficulty);
-    this.wins = [0, 0];
-    this.round = 1;
-
-    $('nameL').textContent = a.def.name; $('nameL').style.color = a.def.color;
-    $('nameR').textContent = b.def.name; $('nameR').style.color = b.def.color;
-    $('portL').src = a.def.portrait; $('portR').src = b.def.portrait;
-    $('hud').classList.remove('hidden');
-    this.camera.free = false;
-    this.camera.userYaw = 0; this.camera.userPitch = 0; this.camera.zoom = 1;
-    this.toast('');
-    this.startRound();
+      $('nameL').textContent = a.def.name; $('nameL').style.color = a.def.color;
+      $('nameR').textContent = b.def.name; $('nameR').style.color = b.def.color;
+      $('portL').src = a.def.portrait; $('portR').src = b.def.portrait;
+      $('hud').classList.remove('hidden');
+      this.camera.free = false;
+      this.camera.userYaw = 0; this.camera.userPitch = 0; this.camera.zoom = 1;
+      this.toast('');
+      this.startRound();
+    } catch (error) {
+      this.enterMenu();
+      this.toast('角色准备失败，请重试：' + (error.message || error), 6000);
+      console.error('match preparation failed', error);
+    } finally {
+      start.disabled = false; start.textContent = label;
+      $('menu').inert = false;
+    }
   }
 
   startRound() {
@@ -1407,6 +1449,7 @@ class Game {
     if (this.fx) { this.fx.density = q === 'low' ? 0.4 : 1; this.fx.lite = q === 'low'; }
     $('qual')?.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === q));
     if (save) try { localStorage.setItem('splatFighter.quality', q); } catch { /* storage blocked */ }
+    this.scheduleMatchPreparation();
   }
 
   toggleQuality() {
