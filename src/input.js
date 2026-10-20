@@ -1,5 +1,7 @@
-// Keyboard + gamepad. Movement is read in screen space and converted to
-// fighter space by the game, so controls stay intuitive while the camera orbits.
+// Keyboard + gamepad + on-screen touch controls. Movement is read in screen
+// space and converted to fighter space by the game, so controls stay intuitive
+// while the camera orbits.
+import { TouchControls, isTouchDevice } from './touch.js';
 
 const KEYMAP = {
   left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
@@ -26,7 +28,8 @@ export class Input {
       this.handlers[e.code]?.(e);
     });
     window.addEventListener('keyup', (e) => this.down.delete(e.code));
-    window.addEventListener('blur', () => this.down.clear());
+    window.addEventListener('blur', () => { this.down.clear(); this.touch?.reset(); });
+    this.touch = isTouchDevice() ? new TouchControls(document.getElementById('touch')) : null;
   }
 
   on(code, fn) { this.handlers[code] = fn; }
@@ -57,15 +60,20 @@ export class Input {
       cam = { x: pad.axes[2] || 0, y: pad.axes[3] || 0 };
     }
 
-    let P = this.wasPressed('P') || edge(2);
-    let K = this.wasPressed('K') || edge(3);
-    const block = this.isDown('block') || btn(5);
-    const dodge = this.wasPressed('dodge') || edge(0);
-    const jump = this.wasPressed('jump') || edge(1);
-    let special = this.wasPressed('special') || edge(7);
+    // touch: the joystick overrides the keys while a thumb is on it
+    const t = this.touch;
+    const tp = t ? t.take() : new Set();
+    if (t?.stick) { sx = t.sx; sy = t.sy; }
+
+    let P = this.wasPressed('P') || edge(2) || tp.has('P');
+    let K = this.wasPressed('K') || edge(3) || tp.has('K');
+    const block = this.isDown('block') || btn(5) || !!t?.held.has('block');
+    const dodge = this.wasPressed('dodge') || edge(0) || tp.has('dodge');
+    const jump = this.wasPressed('jump') || edge(1) || tp.has('jump');
+    let special = this.wasPressed('special') || edge(7) || tp.has('special');
     // pad: LB / LT are the two skills
-    const skill1 = this.wasPressed('skill1') || edge(4);
-    const skill2 = this.wasPressed('skill2') || edge(6);
+    const skill1 = this.wasPressed('skill1') || edge(4) || tp.has('skill1');
+    const skill2 = this.wasPressed('skill2') || edge(6) || tp.has('skill2');
 
     // pressing punch and kick (J+U) together also fires the special
     if (P) this.lastP = now;

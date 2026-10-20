@@ -2,7 +2,11 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#07070a">
 <title>Splat Fighter</title>
 <link rel="icon" href="data:,">
 <script type="importmap">
@@ -157,6 +161,72 @@
   @media (max-width: 640px) { .movelist { grid-template-columns: 1fr; } }
   .help kbd { display: inline-block; min-width: 20px; padding: 0 5px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font: 11px Consolas, monospace; text-align: center; }
 
+  /* ---------- Touch controls (phones / tablets) ---------- */
+  html, body { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  #touch { position: absolute; inset: 0; pointer-events: none; display: none; }
+  body.touch #touch { display: block; }
+  body.touch #keys { display: none; }
+  .stick-zone { position: absolute; left: 0; bottom: 0; width: 46%; height: 62%; pointer-events: auto; touch-action: none; }
+  .stick-base { position: absolute; left: calc(env(safe-area-inset-left) + 18vmin); top: calc(100% - 20vmin); width: 30vmin; height: 30vmin; max-width: 150px; max-height: 150px; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.08), rgba(255,255,255,0.03) 70%); border: 2px solid rgba(255,255,255,0.28); opacity: 0.55; transition: opacity 0.15s; }
+  .stick-base.on { opacity: 1; }
+  .stick-knob { position: absolute; left: 50%; top: 50%; width: 44%; height: 44%; border-radius: 50%; transform: translate(-50%, -50%); background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.9), rgba(200,200,210,0.55)); box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+  .pad { position: absolute; right: calc(env(safe-area-inset-right) + 2vmin); bottom: 2vmin; width: 52vmin; height: 52vmin; max-width: 300px; max-height: 300px; }
+  .tb { position: absolute; display: flex; align-items: center; justify-content: center; flex-direction: column; border-radius: 50%; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; color: #fff; font: bold clamp(11px, 3.2vmin, 16px) var(--font-ui); text-shadow: 0 1px 2px #000; background: rgba(20,20,28,0.55); border: 2px solid rgba(255,255,255,0.35); box-shadow: 0 2px 8px rgba(0,0,0,0.45); transition: transform 0.06s, background 0.06s; }
+  .tb small { font-size: 0.7em; font-weight: normal; opacity: 0.75; }
+  .tb.down { transform: scale(0.9); background: rgba(255,255,255,0.28); }
+  .tb.big { width: 34%; height: 34%; font-size: clamp(14px, 4.2vmin, 20px); }
+  .tb.mid { width: 25%; height: 25%; }
+  .tb.sm { width: 21%; height: 21%; font-size: clamp(10px, 2.8vmin, 13px); }
+  .tb[data-act="P"] { right: 36%; bottom: 2%; border-color: #ff6b4a; }
+  .tb[data-act="K"] { right: 1%; bottom: 30%; border-color: #4cc9ff; }
+  .tb[data-act="jump"] { right: 36%; bottom: 38%; }
+  .tb[data-act="block"] { right: 70%; bottom: 8%; }
+  .tb[data-act="dodge"] { right: 6%; bottom: 3%; }
+  .tb[data-act="special"] { right: 4%; bottom: 66%; border-color: var(--gold); color: var(--gold); }
+  .tb[data-act="skill1"] { right: 66%; bottom: 40%; }
+  .tb[data-act="skill2"] { right: 34%; bottom: 72%; }
+  body.meter-full .tb[data-act="special"] { background: rgba(255, 211, 77, 0.35); animation: pulse 0.4s infinite alternate; }
+  #pauseBtn { position: absolute; top: calc(env(safe-area-inset-top) + 8px); right: calc(env(safe-area-inset-right) + 8px); width: 40px; height: 40px; border-radius: 50%; pointer-events: auto; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.35); color: #fff; font: bold 16px var(--font-ui); display: none; }
+  body.touch #pauseBtn { display: block; }
+  body.touch .bars { width: calc(100% - 120px); }
+  /* the game is played sideways: ask to turn a phone held upright */
+  #rotate { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #07070a; text-align: center; padding: 24px; }
+  #rotate .phone { width: 46px; height: 78px; border: 3px solid #fff; border-radius: 8px; animation: tilt 1.6s ease-in-out infinite; }
+  @keyframes tilt { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+  @media (orientation: portrait) { body.touch #rotate { display: flex; } }
+
+  /* short landscape screens (phones turned sideways) */
+  @media (max-height: 520px) {
+    .menu-left { top: 10px; left: calc(env(safe-area-inset-left) + 14px); }
+    .menu-left .logo { font-size: 30px; }
+    .menu-left .tag { font-size: 10px; letter-spacing: 3px; margin-top: 4px; }
+    .roster-wrap { bottom: calc(env(safe-area-inset-bottom) + 6px); gap: 6px; }
+    .row-label { font-size: 10px; letter-spacing: 2px; }
+    .roster { gap: 8px; }
+    .card { width: 62px; height: 78px; }
+    .card span { font-size: 10px; }
+    .controls-row { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; max-width: 100%; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+    .seg { flex: none; }
+    .seg button, .seg .lbl { padding: 6px 9px; font-size: 11px; white-space: nowrap; }
+    /* the start button can't hide at the end of the scrolling options row */
+    .go { position: fixed; top: calc(env(safe-area-inset-top) + 14px); right: calc(env(safe-area-inset-right) + 14px); font-size: 18px; padding: 9px 22px; }
+    .hint { display: none; }
+    .bars { top: calc(env(safe-area-inset-top) + 6px); }
+    .nameplate { font-size: 14px; }
+    .hp { height: 14px; }
+    .meter-label { display: none; }
+    .portrait { width: 36px; height: 36px; }
+    .timer { font-size: 26px; line-height: 40px; height: 42px; }
+    .bars { grid-template-columns: 1fr 52px 1fr; }
+    #pause, #result { justify-content: flex-start; overflow-y: auto; padding: 14px; gap: 10px; }
+    #pause h1, #result h1 { font-size: 36px; }
+    .help { font-size: 11px; line-height: 1.7; }
+    .movelist { max-height: none; font-size: 11px; }
+    #stats { display: none; }
+    .combo b { font-size: 40px; }
+    .combo span { font-size: 14px; }
+  }
+
   @media (max-width: 860px) {
     .info { display: none; }
     .menu-left { left: 16px; top: 16px; }
@@ -209,6 +279,26 @@
     拖动鼠标 旋转视角 · 滚轮 缩放 · <kbd>P</kbd> 拍照模式 · <kbd>Q</kbd> 画质 · <kbd>Esc</kbd> 暂停
   </div>
   <div id="photoHint" class="hidden">拍照模式 · 拖动旋转 · 滚轮缩放 · <b>P</b> 返回战斗 · <b>H</b> 隐藏界面</div>
+  <!-- phones and tablets: joystick on the left, actions on the right -->
+  <div id="touch">
+    <div class="stick-zone"><div class="stick-base"><div class="stick-knob"></div></div></div>
+    <div class="pad">
+      <div class="tb big" data-act="P">拳<small>J</small></div>
+      <div class="tb big" data-act="K">踢<small>U</small></div>
+      <div class="tb mid" data-act="jump">跳<small>K</small></div>
+      <div class="tb mid" data-act="block">防<small>按住</small></div>
+      <div class="tb sm" data-act="dodge">闪避</div>
+      <div class="tb mid" data-act="special">必杀</div>
+      <div class="tb sm" data-act="skill1">技一</div>
+      <div class="tb sm" data-act="skill2">技二</div>
+    </div>
+    <button id="pauseBtn" aria-label="暂停">II</button>
+  </div>
+</div>
+<div id="rotate">
+  <div class="phone"></div>
+  <div style="font-size:18px;font-weight:bold">请把手机横过来</div>
+  <div style="font-size:13px;color:#a9a49a">Splat Fighter 是横屏游戏。建议关闭竖屏锁定后横握手机。</div>
 </div>
 <div id="stats" class="hidden"></div>
 

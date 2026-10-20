@@ -8,6 +8,7 @@ import { AI, DIFFICULTY } from './ai.js';
 import { FightCamera } from './camera.js';
 import { FX } from './fx.js';
 import { Input } from './input.js';
+import { isTouchDevice } from './touch.js';
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -397,8 +398,19 @@ class Game {
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `<img src="${def.portrait}" alt=""><span>${def.name}</span><b class="tagp"></b>`;
-      card.addEventListener('click', () => { this.p1Index = i; if (this.cpuIndex === i && ROSTER.length > 1) this.cpuIndex = (i + 1) % ROSTER.length; this.refreshMenu(true); });
-      card.addEventListener('contextmenu', (e) => { e.preventDefault(); this.cpuIndex = i; this.refreshMenu(true); });
+      // tap / click: your fighter. Right-click or a long press (phones): the opponent
+      let pressT = null, longPressed = false;
+      card.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch') return;
+        longPressed = false;
+        pressT = setTimeout(() => { longPressed = true; navigator.vibrate?.(20); this.cpuIndex = i; this.refreshMenu(true); }, 450);
+      });
+      const cancel = () => clearTimeout(pressT);
+      card.addEventListener('pointerup', cancel);
+      card.addEventListener('pointercancel', cancel);
+      card.addEventListener('pointerleave', cancel);
+      card.addEventListener('click', () => { if (longPressed) { longPressed = false; return; } this.p1Index = i; if (this.cpuIndex === i && ROSTER.length > 1) this.cpuIndex = (i + 1) % ROSTER.length; this.refreshMenu(true); });
+      card.addEventListener('contextmenu', (e) => { e.preventDefault(); if (e.pointerType === 'touch' || longPressed) return; this.cpuIndex = i; this.refreshMenu(true); });
       roster.appendChild(card);
     });
     const seg = (id, key, after) => $(id).querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
@@ -435,7 +447,13 @@ class Game {
     try { this.fxMode = localStorage.getItem('splatFighter.fx') || 'full'; } catch { this.fxMode = 'full'; }
     $('fxmode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === this.fxMode));
     applyFx();
-    $('start').addEventListener('click', () => this.startMatch());
+    $('start').addEventListener('click', () => { this.goFullscreen(); this.startMatch(); });
+    // phones and tablets: on-screen joystick and buttons, a pause button
+    if (isTouchDevice()) {
+      document.body.classList.add('touch');
+      document.querySelector('.row-label').textContent = '点按选择你的角色 · 长按选择对手 · 拖动画面旋转查看';
+      $('pauseBtn').addEventListener('click', () => { if (this.inMatch) this.setPaused(true); });
+    }
     $('resume').addEventListener('click', () => this.setPaused(false));
     $('restart').addEventListener('click', () => { this.setPaused(false); this.startMatch(); });
     $('toMenu').addEventListener('click', () => { this.setPaused(false); this.enterMenu(); });
@@ -1150,6 +1168,17 @@ class Game {
     this.paused = p;
     $('pause').classList.toggle('hidden', !p);
     if (p && this.p1) this.renderMoveList(this.p1);
+    this.input.touch?.reset(); // no button stays "held" across the pause screen
+  }
+
+  // Phones: play fullscreen and sideways where the browser allows it (Android
+  // Chrome; iOS Safari has neither and keeps the "turn your phone" prompt)
+  goFullscreen() {
+    if (!isTouchDevice() || document.fullscreenElement) return;
+    const el = document.documentElement;
+    el.requestFullscreen?.({ navigationUI: 'hide' })
+      .then(() => screen.orientation?.lock?.('landscape').catch(() => {}))
+      .catch(() => {});
   }
 
   // The fighter's moves and every combo string, read from its starter and
@@ -1251,6 +1280,8 @@ class Game {
     const webgpu = !!navigator.gpu;
     const cores = navigator.hardwareConcurrency || 4;
     const mem = navigator.deviceMemory || 8;
+    // phones and tablets: mobile GPUs and batteries start on the light tier
+    if (isTouchDevice()) return 'low';
     if (!webgpu || cores <= 4 || mem <= 4) return 'low';
     return 'high';
   }
@@ -1312,7 +1343,9 @@ class Game {
       const m = $(`meter${s}`);
       m.querySelector('.m').style.width = `${f.meter}%`;
       m.classList.toggle('full', f.meter >= TUNING.meterMax);
-      $(`meterLabel${s}`).textContent = f.meter >= TUNING.meterMax ? (f.slot === 0 ? '必杀就绪 · 按 I' : '必杀就绪') : '必杀槽';
+      $(`meterLabel${s}`).textContent = f.meter >= TUNING.meterMax ? (f.slot === 0 ? (this.input.touch ? '必杀就绪 · 点「必杀」' : '必杀就绪 · 按 I') : '必杀就绪') : '必杀槽';
+      // the on-screen 必杀 button glows when the player's meter is full
+      if (f.slot === 0) document.body.classList.toggle('meter-full', f.meter >= TUNING.meterMax);
       [...$(`wins${s}`).children].forEach((pip, i) => pip.classList.toggle('on', i < this.wins[f.slot]));
       const combo = $(`combo${s}`);
       const show = f.combo >= 2 && f.comboTimer > 0;
