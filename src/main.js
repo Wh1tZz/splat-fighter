@@ -160,6 +160,7 @@ class Game {
     // clip and an alias of it ("name~") to re-enter smoothly.
     const lib = this.scene.skeletalAnimationLibrary;
     for (const name of [...lib.keys()]) if (!name.endsWith('~')) lib.set(`${name}~`, lib.get(name));
+    this.trimClipMemory();
 
     this.progress(0.76, '正在载入 4 名高斯格斗家…');
     done = 0;
@@ -181,6 +182,26 @@ class Game {
     await sleep(250);
     $('loading').classList.add('hidden');
     this.enterMenu();
+  }
+
+  // Memory: PINOC clips carry tracks for all 441 bones of the full MetaHuman
+  // skeleton (the face included), but the fighters' rig has 86 and reads only
+  // tracks 0-85. The rest - 80% of ~170 MB of keyframes - never move and are
+  // never read: drop them. The engine also keeps every downloaded clip file
+  // (~67 MB for 118 clips) for re-use; all clips are parsed by now, so let
+  // those go too. Together that was about a third of the page's memory, the
+  // difference between running and crashing on many phones.
+  trimClipMemory() {
+    const keep = this.rigBones || 86;
+    const seen = new Set();
+    for (const anim of this.scene.skeletalAnimationLibrary.values()) {
+      const ks = anim.skeletalStore?.keyframes;
+      if (!ks || seen.has(ks)) continue;
+      seen.add(ks);
+      for (const bi of [...ks.keys()]) if (bi >= keep) ks.delete(bi);
+    }
+    Animation._bufferCache?.clear();
+    Animation._convertedCache?.clear();
   }
 
   // WebGPU's tile-based splat renderer sizes its per-tile lists to what it has
@@ -272,6 +293,7 @@ class Game {
       probe.setActive(false);
       probe.detachAutoUpdate();
       const arm = probe.armature;
+      this.rigBones = arm.boneNames.length; // the fighters' rig: tracks past this are never read
       // one root convention for every clip before anything is measured
       this.bakeRootYaw(arm.boneNames);
       const ids = ['thigh_l', 'thigh_r', 'upperarm_l', 'upperarm_r'].map((n) => arm.boneNames.indexOf(n));
