@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="https://wh1tzz.github.io/splat-fighter/"><img src="docs/readme/gameplay.gif" width="100%" alt="Splat Fighter gameplay"></a>
+<a href="https://wh1tzz.github.io/splat-fighter/"><img src="docs/readme/gameplay.webp" width="100%" alt="Splat Fighter gameplay"></a>
 
 # Splat Fighter
 
